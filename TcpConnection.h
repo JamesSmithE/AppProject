@@ -3,6 +3,10 @@
 #include <expected>
 #include <cmath>
 #include <ctime>
+#include <string>
+#include <boost/bind.hpp>
+#include <boost/shared_ptr.hpp>
+#include <boost/enable_shared_from_this.hpp>
 #include <boost/asio.hpp>
 
 using namespace std;
@@ -11,10 +15,10 @@ using boost::asio::ip::tcp;
 namespace Protocol {
 
 class TcpConnection
-    : public std::enable_shared_from_this<TcpConnection>
+    : public boost::enable_shared_from_this<TcpConnection>
 {
 public:
-    typedef std::shared_ptr<TcpConnection> pointer;
+    typedef boost::shared_ptr<TcpConnection> pointer;
 
     TcpConnection(const TcpConnection&) = delete;
     TcpConnection(TcpConnection&&) = delete;
@@ -35,15 +39,14 @@ public:
     void start()
     {
         message_ = "";
-/*
+
         boost::asio::async_write(socket_,
                                  boost::asio::buffer(message_),
-                                 std::bind(&TcpConnection::handle_write,
-                                           shared_from_this(),
-                                           boost::asio::placeholders::error,
-                                           boost::asio::placeholders::bytes_transferred));
- */
-   }
+                                 boost::bind(&TcpConnection::handle_write,
+                                 shared_from_this(),
+                                 boost::asio::placeholders::error,
+                                 boost::asio::placeholders::bytes_transferred));
+    }
 
 private:
     TcpConnection(boost::asio::io_context& io_context)

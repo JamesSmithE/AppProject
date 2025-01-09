@@ -30,14 +30,14 @@ public:
 
 private:
     void startAccept()
-    { /*
+    {
         TcpConnection::pointer newConnection = TcpConnection::create(io_context_);
         acceptor_.async_accept(newConnection->socket(),
-                               std::bind(&TcpHost::handleAccept,
-                                         this,
-                                         newConnection,
-                                         boost::asio::placeholders::error));
-      */
+                               boost::bind(&TcpHost::handleAccept,
+                               this,
+                               newConnection,
+                               boost::asio::placeholders::error));
+
     }
 
     void handleAccept(TcpConnection::pointer newConnection,
