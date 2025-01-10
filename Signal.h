@@ -5,6 +5,7 @@
 #include <list>
 #include <thread>
 #include <memory>
+#include <iostream>
 
 #include <AppConcepts.h>
 
@@ -15,10 +16,19 @@ public:
     AsyncConnection(std::function<void(Args...)> callable, bool runAsync = true)
         : callableT{std::move(callable)}, _runAsync{runAsync} {
     }
-    AsyncConnection(const AsyncConnection& ) = default;
-    AsyncConnection(AsyncConnection&& ) = default;
+    AsyncConnection(const AsyncConnection& a) {
+        _runAsync = a._runAsync;
+        callableT = a.callableT;
+    };
+    AsyncConnection(AsyncConnection&& a) {
+        _runAsync = a._runAsync;
+        callableT = std::move(a.callableT);
+    };
     std::function<void(Args...)> callableT;
     bool _runAsync;
+
+    AsyncConnection& operator=(const AsyncConnection&)  = default;
+    AsyncConnection& operator=(const AsyncConnection&&) = default;
 };
 
 template <typename... Args> class Signal {
@@ -28,6 +38,16 @@ public:
 
     Signal() : currentId{0}, syncMutex{std::make_shared<std::recursive_mutex>()} {
     }
+
+    Signal(const Signal& s) {
+        currentId = s.currentId;
+        handlersDetails = s.handlersDetails;
+    };
+    Signal(Signal&& s) {
+        currentId = s.currentId;
+        handlersDetails = std::move(s.handlersDetails);
+    };
+
     size_t ConnectionCount() const {
         std::lock_guard<std::recursive_mutex> lock(*syncMutex);
         return handlersDetails.size();
@@ -82,7 +102,6 @@ public:
             }
         }
     }
-
 
     template <typename... Args2>
     void Emit(Args2&&... args) {

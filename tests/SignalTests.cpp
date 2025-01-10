@@ -15,13 +15,11 @@ TEST(Signal, AsyncHandler) {
          std::cout << "Async Call" << std::endl;
          std::string str1="0987654321", str2;
 
-         for(int i=0;i<1024;++i) {
+         for(int i=0;i<10024;++i) {
              str2=str1;
              str1=str2;
          }
-
          asyncBool = true;
-
       }, true
    };
    auto id2 = s += AppNamespace::AsyncConnection<float> { [&] (int) {
@@ -39,7 +37,7 @@ TEST(Signal, AsyncHandler) {
 
    s.TryJoinOnAll();
 
-   ASSERT_TRUE(asyncBool == false);
+   ASSERT_TRUE(asyncBool == true);
 }
 
 TEST(Signal, InlineParamPlacement) {
@@ -56,15 +54,13 @@ TEST(Signal, InlineParamPlacement) {
     s(test{1});
 }
 
+
 TEST(Signal, TestSignalMove) {
-
     AppNamespace::Signal<> s;
-
     int invokeCount = 0;
-
     auto id = s += AppNamespace::AsyncConnection<>{[&] () {
         invokeCount++;
-    }};
+    }, false };
 
     AppNamespace::Signal<> s2 = std::move(s);
 
@@ -81,18 +77,19 @@ TEST(Signal, TestSignalCopy) {
 
     auto id = s += AppNamespace::AsyncConnection<>{[&]() {
         invokeCount++;
-    }};
+    }, false };
     auto id2 = s += AppNamespace::AsyncConnection<>{[&]() {
         invokeCount++;
-    }};
+    }, false };
 
     AppNamespace::Signal<> s2 = s;
 
-    s2();
+    s();
     ASSERT_EQ(invokeCount, 2);
     s2();
     ASSERT_EQ(invokeCount, 4);
 }
+
 
 TEST(Signal, ConnectDisconnectProperOrder) {
 
@@ -126,13 +123,13 @@ TEST(Signal, TestRemoveAllConnections) {
     AppNamespace::Signal<> s;
     auto id = s += AppNamespace::AsyncConnection<>{[&] () {
         invokeCount++;
-    }};
+    }, false };
     auto id2 = s+= AppNamespace::AsyncConnection<>{[&] () {
         invokeCount++;
-    }};
+    }, false };
     auto id3 = s+= AppNamespace::AsyncConnection<>{[&] () {
         invokeCount++;
-    }};
+    }, false };
 
     s();
     ASSERT_EQ(invokeCount, 3);
@@ -154,16 +151,16 @@ TEST(Signal, TestRemoveConnection) {
 
     auto id = s += AppNamespace::AsyncConnection<>{[] () {
         ASSERT_TRUE(false);
-    }};
+    }, false };
     auto id2 = s += AppNamespace::AsyncConnection<>{[&] () {
         invokeCount ++;
-    }};
+    }, false };
     auto id3 = s += AppNamespace::AsyncConnection<>{[] () {
         ASSERT_TRUE(false);
-    }};
+    }, false };
     auto id4 = s += AppNamespace::AsyncConnection<>{[] () {
         ASSERT_TRUE(false);
-    }};
+    }, false };
 
     auto id5 = s.RemoveHandler(id);
     auto id6 = s.RemoveHandler(id3);
@@ -175,7 +172,7 @@ TEST(Signal, TestRemoveConnection) {
         ASSERT_TRUE(false);
     }};
 
-    auto id9 = s.RemoveHandler(id5);
+    auto id9 = s.RemoveHandler(id8);
     s();
 
     ASSERT_EQ(invokeCount, 2);
@@ -209,6 +206,8 @@ TEST(Signal, TestPrimitiveTypeBoolByValue) {
     s(payload);
 }
 
+
+
 TEST(Signal, TestPrimitiveTypeFloatByValue) {
     float payload = 16.f;
     AppNamespace::Signal<float> s;
@@ -222,6 +221,7 @@ TEST(Signal, TestPrimitiveTypeFloatByValue) {
     s(payload);
 }
 
+
 TEST(Signal, TestPrimitiveTypeIntByValue) {
     int payload = 1024;
     AppNamespace::Signal<int> s;
@@ -234,7 +234,6 @@ TEST(Signal, TestPrimitiveTypeIntByValue) {
     }};
     s(payload);
 }
-
 
 TEST(Signal, TestPrimitiveTypeBoolByReference) {
 
@@ -258,7 +257,7 @@ TEST(Signal, TestPrimitiveTypeFloatByReference) {
     float payload = 16.f;
     AppNamespace::Signal<float&> s;
 
-    auto id = s += s += AppNamespace::AsyncConnection<float&> {[&] (auto& t) {
+    auto id = s += AppNamespace::AsyncConnection<float&> {[&] (auto& t) {
         ASSERT_EQ(t, 16.f);
         payload = 18.f;
     }};
@@ -284,6 +283,7 @@ TEST(Signal, TestPrimitiveTypeIntByReference) {
 
     s(payload);
 }
+
 
 TEST(Signal, TestMultipleConnectionsStructByReference) {
 
@@ -312,7 +312,6 @@ TEST(Signal, TestMultipleConnectionsStructByReference) {
     s(t);
 }
 
-
 TEST(Signal, TestMultipleConnectionsStructCopy) {
 
     struct test {
@@ -327,26 +326,25 @@ TEST(Signal, TestMultipleConnectionsStructCopy) {
 
     int invokeCount = 0;
 
-    auto id = s += [&] (test t) {
+    auto id = s += AppNamespace::AsyncConnection<test> {[&] (test t) {
         ASSERT_EQ(t.id, 123);
         ASSERT_EQ(t.message, "message1");
         ASSERT_EQ(t.errorDescription, "description1");
         ASSERT_EQ(invokeCount, 0);
-    };
-    auto id2 = s += [&] (test t) {
+    }};
+    auto id2 = s += AppNamespace::AsyncConnection<test> {[&] (test t) {
         invokeCount ++;
         ASSERT_EQ(t.id, 123);
         ASSERT_EQ(t.message, "message1");
         ASSERT_EQ(t.errorDescription, "description1");
         ASSERT_EQ(invokeCount, 1);
-    };
+    }};
 
     s(t);
     invokeCount = 0;
 
     s(t);
 }
-
 
 TEST(Signal, TestMultipleTypesCopy) {
 
@@ -364,22 +362,21 @@ TEST(Signal, TestMultipleTypesCopy) {
 
     AppNamespace::Signal<test, test2> s;
 
-    auto id = s += [] (test t, test2 t2) {
+    auto id = s += AppNamespace::AsyncConnection<test,test2> { [] (test t, test2 t2) {
         ASSERT_EQ(t.id, 123);
         ASSERT_EQ(t.message, "message1");
         ASSERT_EQ(t.errorDescription, "description1");
         ASSERT_EQ(t2.payload, "empty_payload");
-    };
-    auto id2 = s += [] (test t, test2 t2) {
+    }};
+    auto id2 = s += AppNamespace::AsyncConnection<test,test2> { [] (test t, test2 t2) {
         ASSERT_EQ(t.id, 123);
         ASSERT_EQ(t.message, "message1");
         ASSERT_EQ(t.errorDescription, "description1");
         ASSERT_EQ(t2.payload, "empty_payload");
-    };
+    }};
 
     s(t, t2);
 }
-
 
 TEST(Signal, TestMultipleUserTypesByValueAndReference) {
 
@@ -396,16 +393,16 @@ TEST(Signal, TestMultipleUserTypesByValueAndReference) {
 
     AppNamespace::Signal<test&, test2> s;
 
-    auto id = s += [] (test& t, test2 t2) {
+    auto id = s += AppNamespace::AsyncConnection<test&,test2> { [] (test& t, test2 t2) {
         ASSERT_EQ(t.id, 123);
         ASSERT_EQ(t.message, "message1");
         ASSERT_EQ(t2.payload, "empty_payload");
-    };
-    auto id2 = s += [] (test& t, test2 t2) {
+    }};
+    auto id2 = s += AppNamespace::AsyncConnection<test&,test2> {[] (test& t, test2 t2) {
         ASSERT_EQ(t.id, 123);
         ASSERT_EQ(t.message, "message1");
         ASSERT_EQ(t2.payload, "empty_payload");
-    };
+    }};
 
     s(t, t2);
 }
@@ -425,18 +422,24 @@ TEST(Signal, TestMultipleUserTypesAndPrimitiveTypeByValue) {
 
     AppNamespace::Signal<test, test2, int> s;
 
-    auto ids = s += [] (test& t, test2 t2, auto i) {
+    auto ids = s += AppNamespace::AsyncConnection<test&,test2, int> {[] (test& t, test2 t2, auto i) {
         ASSERT_EQ(t.id, 123);
         ASSERT_EQ(t.message, "message1");
         ASSERT_EQ(t2.payload, "empty_payload");
         ASSERT_EQ(i, 22);
-    };
-    auto id = s += [] (test& t, test2 t2, auto i) {
+    }};
+    auto id = s += AppNamespace::AsyncConnection<test&,test2,int> {[] (test& t, test2 t2, auto i) {
         ASSERT_EQ(t.id, 123);
         ASSERT_EQ(t.message, "message1");
         ASSERT_EQ(t2.payload, "empty_payload");
         ASSERT_EQ(i, 22);
-    };
+    }};
 
     s(t, t2, 22);
+}
+
+int main(int argc, const char * argv[]) {
+
+    ::testing::InitGoogleTest();
+    return RUN_ALL_TESTS();
 }
