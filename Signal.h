@@ -5,7 +5,6 @@
 #include <list>
 #include <thread>
 #include <memory>
-#include <iostream>
 
 #include <AppConcepts.h>
 

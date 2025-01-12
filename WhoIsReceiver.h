@@ -5,40 +5,42 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdlib.h>
-#include <string.h>
-
+#include <atomic>
 #include <unistd.h>
 #include <sys/select.h>
-
 #include <functional>
 #include <string>
 #include <memory>
+#include <thread>
 
-#include "AppConcepts.h"
-
+// #include "AppConcepts.h"
 #include "DatagramReceiver.h"
 
-#define MAXLEN 2048
-#define TIMEOUT_SEC 8
+using ResponseDataType = std::string;
 
-template <AppConcepts::HasProtocolSignature Protocol = DatagramReceiver>
+template <typename Protocol = DatagramReceiver>
 class WhoIsReceiver {
 public:
-    enum class Error { SOCKET_ERROR, REUSE, BIND, JOIN_GROUP };
 
-    using ErrorHandler  = std::function<void(std::string,Error)>;
-    using ReceiverReady = std::function<void()>;
+    using Error = typename Protocol::Error;
+    using ErrorHandler = typename Protocol::ErrorHandler;
+    using DataReady = std::function<void(std::string)>;
+    using StartTransmitter = std::function<void()>;
 
-    WhoIsReceiver(const std::string bindAddress,
+    WhoIsReceiver(const std::string& bindAddress,
                   const unsigned int portNum,
                   const std::string& multicastAddr) {
 
-        protocol = std::make_unique<Protocol>(bindAddress,portNum,multicastAddr, [this] (){});
-        protocol->readyToReceive = [this]() {
-            getResponseData();
+        protocol = std::make_unique<Protocol>(bindAddress,
+                                              portNum,
+                                              multicastAddr,
+                                              std::move([this](std::string&&,Error)->void{}));
+        protocol->readyToReceive = [this]()->void {
+            startTransmitter();
         };
-
-        protocol->start();
+        protocol->searchDone = [&](std::string&& msg)->void {
+            onSearchDone(msg);
+        };
     }
 
     WhoIsReceiver(const WhoIsReceiver&) = delete;
@@ -47,12 +49,41 @@ public:
     WhoIsReceiver operator=(const WhoIsReceiver&) = delete;
     WhoIsReceiver operator=(WhoIsReceiver&&) = delete;
 
+    void startSearching() {
+        setupThreadExec();
+    }
+
+    ErrorHandler onError;
+    DataReady onDataReady;
+    StartTransmitter startTransmitter;
+
+private:
     void getResponseData() {
         std::string msg = protocol->getResponses();
     }
-
-private:
-    ErrorHandler onError;
-    ReceiverReady readyToReceive;
+    void onMessageReceived(ResponseDataType&& data) {
+        std::lock_guard<std::mutex> guard(callback_mutex);
+        onDataReady(std::move(data));
+    }
+    void onSearchDone(const std::string& message) {
+        onMessageReceived(message.c_str());
+        thread_stopped = true;
+    }
+    void setupThreadExec() {
+        thread_stopped = false;
+        tryThreadJoin();
+        whoIsSearchThread = std::make_unique<std::thread>([&] () {
+            protocol->startListening();
+        });
+    }
+    void tryThreadJoin() {
+        if(whoIsSearchThread != nullptr) {
+            if(whoIsSearchThread->joinable())
+                whoIsSearchThread->join();
+        }
+    }
     std::unique_ptr<Protocol> protocol;
+    std::atomic<bool> thread_stopped;
+    std::mutex callback_mutex;
+    std::unique_ptr<std::thread> whoIsSearchThread;
 };

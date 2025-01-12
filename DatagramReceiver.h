@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <vector>
-
+#include <functional>
 
 #include <unistd.h>
 #include <sys/select.h>
@@ -31,15 +31,19 @@ class DatagramReceiver {
 public:
     enum class Error { SOCKET_ERROR, REUSE, BIND, JOIN_GROUP };
 
-    using ErrorHandler = std::function<void(std::string,Error)>;
+    using ErrorHandler = std::function<void(std::string&&,Error)>;
     using ReceiverReady = std::function<void()>;
+    using SearchDone = std::function<void(std::string&&)>;
 
     DatagramReceiver(const std::string bindAddress,
-                  const unsigned int portNum,
-                  const std::string& multicastAddr,
-                  ErrorHandler error, int)
+                     const unsigned int portNum,
+                     const std::string& multicastAddr,
+                     ErrorHandler&& error)
 
-        : bind_address{}, multicast_address{}, mreq{}, onError{std::move(error)}  {
+        : bind_address{},
+          multicast_address{},
+          mreq{},
+          onError{std::forward<decltype(error)>(error)}  {
 
         memset((char *) &bind_address, 0, sizeof(bind_address));
         bind_address.sin_family = AF_INET;
@@ -58,10 +62,19 @@ public:
     }
 
     ~DatagramReceiver() {
-         setsockopt(recvSocket, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
-         close(recvSocket);
+        setsockopt(recvSocket, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
+        close(recvSocket);
     }
 
+    void startListening() {
+        listen();
+    }
+
+    ErrorHandler onError;
+    ReceiverReady readyToReceive;
+    SearchDone searchDone;
+
+private:
     DatagramReceiver(const DatagramReceiver&) = delete;
     DatagramReceiver(DatagramReceiver&&) = delete;
 
@@ -88,6 +101,11 @@ public:
             return;
         }
         readyToReceive();
+
+        auto msg = getResponses();
+
+        searchDone(msg.data());
+
     }
 
     std::string getResponses() {
@@ -107,9 +125,9 @@ public:
 
         while ((reason = select(recvSocket + 1, &fds, NULL, NULL, &tv)) > 0) {
 
-            buffer.resize(MAXLEN + 1);
+            buffer.resize(4096 + 1);
 
-            auto result = recv(recvSocket, buffer.data(), MAXLEN, 0);
+            auto result = recv(recvSocket, buffer.data(), 4096, 0);
 
             if(result > 0) {
                 totalBytes += result;
@@ -125,11 +143,6 @@ public:
         return response_string;
     }
 
-    void startListening()    {
-
-    }
-
-private:
     int recvSocket;
     const u_int yes = 1;
     const int ttl = 4;
@@ -137,6 +150,4 @@ private:
     struct sockaddr_in bind_address;
     struct in_addr multicast_address;
     struct ip_mreq mreq;
-    ErrorHandler onError;
-    ReceiverReady readyToReceive;
 };
