@@ -27,7 +27,7 @@ public:
     bool _runAsync;
 
     AsyncConnection& operator=(const AsyncConnection&)  = default;
-    AsyncConnection& operator=(const AsyncConnection&&) = default;
+    AsyncConnection& operator=(AsyncConnection&&) = default;
 };
 
 template <typename... Args> class Signal {
